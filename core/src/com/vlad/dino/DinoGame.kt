@@ -4,23 +4,26 @@ import com.badlogic.gdx.ApplicationAdapter
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
+import com.badlogic.gdx.graphics.GL20.GL_COVERAGE_BUFFER_BIT_NV
 import com.badlogic.gdx.graphics.GL20.GL_DEPTH_TEST
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.VertexAttributes
-import com.badlogic.gdx.graphics.g2d.CpuSpriteBatch
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
-import com.badlogic.gdx.graphics.g2d.TextureRegion
 import com.badlogic.gdx.graphics.g3d.*
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute
+import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder
 import com.badlogic.gdx.math.Vector3
 import com.badlogic.gdx.math.collision.BoundingBox
+import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
-import com.badlogic.gdx.scenes.scene2d.ui.Button
 import com.badlogic.gdx.scenes.scene2d.ui.ImageButton
 import com.badlogic.gdx.scenes.scene2d.ui.Skin
-import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
+import com.badlogic.gdx.utils.viewport.ScreenViewport
 import com.vlad.dino.camera.MovingCamera
+import com.vlad.dino.character.CharacterManager
 import com.vlad.dino.input.InputManager
 
 class DinoGame : ApplicationAdapter() {
@@ -30,24 +33,31 @@ class DinoGame : ApplicationAdapter() {
     private lateinit var spriteBatch: SpriteBatch
     private lateinit var modelBuilder: ModelBuilder
     private lateinit var environment: Environment
-    private lateinit var assets: DinoAssetManager
+    private lateinit var assets: GameAssetManager
     private lateinit var inputManager: InputManager
     private lateinit var groundManager: GroundManager
+    private lateinit var characterManager: CharacterManager
+    private lateinit var light: DirectionalLight
 
     private val instances : ArrayList<ModelInstance> = arrayListOf()
-    private lateinit var dinoInstance: ModelInstance
 
     private lateinit var buttonTexture : Texture
     private lateinit var button : ImageButton
 
     private lateinit var stage: Stage
+    private lateinit var skin: Skin
 
+    private var width = 0
+    private var height = 0
 
     override fun create() {
 
         Gdx.gl.glEnable(GL_DEPTH_TEST)
 
-        camera = MovingCamera(60f, Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
+        width = Gdx.graphics.width
+        height = Gdx.graphics.height
+
+        camera = MovingCamera(60f, width.toFloat(), height.toFloat())
 
         var cameraTarget = Vector3(10f, 7f, 0f)
         camera.position.x = 10f
@@ -55,6 +65,7 @@ class DinoGame : ApplicationAdapter() {
         camera.position.z = 24f
         camera.near = 0.1f
         camera.far = 3000f
+
 
 
         camera.lookAt(cameraTarget)
@@ -65,7 +76,7 @@ class DinoGame : ApplicationAdapter() {
         spriteBatch = SpriteBatch()
         modelBuilder = ModelBuilder()
 
-        assets = DinoAssetManager()
+        assets = GameAssetManager()
         assets.loadAssets()
 
 
@@ -73,29 +84,36 @@ class DinoGame : ApplicationAdapter() {
         inputManager.camera = camera
 
         groundManager = GroundManager()
-
+        characterManager = CharacterManager()
 
         // UI
-        buttonTexture = Texture("ui/grey_button.png")
-        stage = Stage()
+        skin = Skin(Gdx.files.internal("uiskin.json"))
+        stage = Stage(ScreenViewport())
 
-        var skin = Skin()
-        var buttonStyle = Button.ButtonStyle()
-//        buttonStyle.up = skin.getDrawable("grey_button")
-//        buttonStyle.down = skin.getDrawable("grey_button")
-        var drawable = TextureRegionDrawable(TextureRegion(buttonTexture))
-        button = ImageButton(drawable)
-        stage.addActor(button)
+        val textButton = TextButton("Up", skin, "default")
+
+
+        textButton.width = 200f
+        textButton.height = 200f
+        textButton.setPosition(width.toFloat() - textButton.width, 0f)
+
+        textButton.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent, x: Float, y: Float) {
+
+                characterManager.jump()
+
+            }
+        })
+
+        stage.addActor(textButton)
+        Gdx.input.inputProcessor = stage
+
+        light = DirectionalLight()
+        light.set(1f, 1f, 1f, 0f, 0f, -1f)
 
         environment = Environment()
+        environment.add(light)
         environment.set(ColorAttribute(ColorAttribute.AmbientLight, 0.8f, 0.8f, 0.8f, 1f))
-
-
-        inputManager.onTouchListener = {
-
-            
-
-        }
 
     }
 
@@ -107,53 +125,31 @@ class DinoGame : ApplicationAdapter() {
 
         }
 
-        if(Gdx.input.isTouched){
-
-            val x = Gdx.input.x
-            val y = Gdx.input.y
-
-//            var isHit: Boolean = false
-//            if(button.hit(x.toFloat(), y.toFloat(), isHit).)
-//                println("touched $x")
-
-        }
-
         Gdx.gl.glClearColor(227/255f, 227/255f, 227/255f, 1f)
         Gdx.gl.glViewport(0, 0, Gdx.graphics.width, Gdx.graphics.height)
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT or GL20.GL_DEPTH_BUFFER_BIT)
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT or GL20.GL_DEPTH_BUFFER_BIT or (if (Gdx.graphics.bufferFormat.coverageSampling) GL_COVERAGE_BUFFER_BIT_NV else 0))
+
 
         camera.update()
         groundManager.update()
+        characterManager.update(Gdx.graphics.deltaTime)
+
         modelBatch.begin(camera)
-        modelBatch.render(instances, environment)
+        modelBatch.render(characterManager.instances, environment)
         modelBatch.render(groundManager.instances, environment)
-//        spriteBatch.begin()
-//        spriteBatch.draw(buttonTexture, Gdx.graphics.width.toFloat() - buttonTexture.width, 0f)
-//        spriteBatch.end()
-        stage.draw()
         modelBatch.end()
+
+
+        stage.act(Gdx.graphics.deltaTime)
+        stage.draw()
 
     }
 
 
-    fun spawnObjects(){
+    private fun spawnObjects(){
 
-        val dinoScale = 3f
-        val dinoModel = assets.get("dino/dino0.obj", Model::class.java)
-        dinoInstance = ModelInstance(dinoModel, 0f, 0f, 0f)
-        dinoInstance.transform.scale(dinoScale, dinoScale, dinoScale)
-        instances.add(dinoInstance)
-
-//        showBoundingBoxOfModel(dinoModel, dinoScale)
-
+        characterManager.createCharacter(Vector3(0f, 0f, 0f), assets.assets)
         groundManager.createGround(-2f, assets.assets)
-
-
-
-
-
-        //instances.add(groundInstance)
-
 
     }
 

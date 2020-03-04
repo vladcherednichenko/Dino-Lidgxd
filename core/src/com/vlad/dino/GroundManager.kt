@@ -17,12 +17,9 @@ class GroundManager {
 
     var groundModel : Model? = null
 
-    val groundCenter = Vector3(130f, 0f, 0f)
-    val partsPositions = arrayListOf<Vector3>()
-    val groundInitRotationY = 90f
-
-    val minVisibleBounds = -70f
-    val maxVisibleBounds = 1000
+    private val groundCenter = Vector3(130f, 0f, 0f)
+    private val partsPositions = arrayListOf<Vector3>()
+    private val groundInitRotationY = 90f
 
     fun createGround(height: Float, assets: AssetManager){
 
